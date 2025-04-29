@@ -127,6 +127,10 @@ export function Thread() {
 
   const lastError = useRef<string | undefined>(undefined);
 
+  const dropRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const formats = ["jpg", "png", "gif", "webp", "bmp", "jpeg", "tiff"];
+
   useEffect(() => {
     if (!stream.error) {
       lastError.current = undefined;
@@ -246,6 +250,81 @@ export function Thread() {
   const hasNoAIOrToolMessages = !messages.find(
     (m) => m.type === "ai" || m.type === "tool",
   );
+
+  useEffect(() => {
+    if (!dropRef.current) return;
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragging(false);
+
+      if (!e.dataTransfer) return;
+
+      const files = Array.from(e.dataTransfer.files);
+
+      if (formats && files.some(file =>
+        !formats.some(format =>
+          file.name.toLowerCase().endsWith(format.toLowerCase())
+        )
+      )) {
+        toast.error("Invalid file type. Please upload an image. supported formats: " + formats.join(", "));
+        return;
+      }
+  
+
+      if (files.length) {
+        const imageUrls = await Promise.all(
+          Array.from(files).map((file) => {
+            return new Promise<MessageContentImageUrl>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                resolve({
+                  type: "image_url",
+                  image_url: {
+                    url: reader.result as string,
+                  },
+                });
+              };
+              reader.readAsDataURL(file);
+            });
+          }),
+        );
+        setImageUrlList([...imageUrlList, ...imageUrls]);
+      }
+    };
+
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragging(true);
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragging(false);
+    };
+
+    const element = dropRef.current;
+    element.addEventListener("dragover", handleDragOver);
+    element.addEventListener("drop", handleDrop);
+    element.addEventListener("dragenter", handleDragEnter);
+    element.addEventListener("dragleave", handleDragLeave);
+
+    return () => {
+      element.removeEventListener("dragover", handleDragOver);
+      element.removeEventListener("drop", handleDrop);
+      element.removeEventListener("dragenter", handleDragEnter);
+      element.removeEventListener("dragleave", handleDragLeave);
+    };
+  });
+
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -430,7 +509,10 @@ export function Thread() {
 
                 <ScrollToBottom className="animate-in fade-in-0 zoom-in-95 absolute bottom-full left-1/2 mb-4 -translate-x-1/2" />
 
-                <div className="bg-muted relative z-10 mx-auto mb-8 w-full max-w-3xl rounded-2xl border shadow-xs">
+                <div
+                  ref={dropRef}
+                  className="bg-muted relative z-10 mx-auto mb-8 w-full max-w-3xl rounded-2xl border shadow-xs"
+                >
                   <form
                     onSubmit={handleSubmit}
                     className="mx-auto grid max-w-3xl grid-rows-[1fr_auto] gap-2"
